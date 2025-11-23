@@ -1,0 +1,5 @@
+1. code structure analyser
+2. dependency analyser/manager
+3. data flow analyser - how does data flow inside the code repo
+4. request flow analyser - how does a complete request goes through
+5. api analyser

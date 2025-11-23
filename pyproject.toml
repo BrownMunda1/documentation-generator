@@ -1,0 +1,21 @@
+[project]
+name = "documentation-generator"
+version = "0.0.1"
+dependencies = [
+    "python-dotenv",
+    "requests",
+    "pydantic",
+    "PyGitHub",
+    "pygit2",
+    "langchain",
+    "langchain-google-genai",
+]
+
+[project.optional-dependencies]
+local = [
+    "build"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

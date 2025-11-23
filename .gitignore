@@ -1,0 +1,18 @@
+# Virtual Envivironments
+.venv
+
+# Environment files
+.env
+
+# Build Files
+dist
+*.egg-info
+
+# Certificates
+*.pem
+
+# Temporary folders
+staged
+
+# Cache Files
+__pycache__
