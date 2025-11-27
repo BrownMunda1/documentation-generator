@@ -1,8 +1,11 @@
 import os
 import jwt
 import time
+import base64
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,14 +14,19 @@ load_dotenv()
 
 # We then create a jwt token out of that using this code:
 
-github_app_private_key_path = "documentation-generator-brownmunda.2025-11-23.private-key.pem"
 github_app_client_id = os.getenv("GITHUB_APP_CLIENT_ID")
 
-pem_path = Path(github_app_private_key_path).resolve()
+github_app_private_key = os.getenv("GITHUB_APP_PRIVATE_KEY")
+github_app_private_key = github_app_private_key.replace("-----BEGIN RSA PRIVATE KEY-----", "").replace("-----END RSA PRIVATE KEY-----", "")
+key_bytes = base64.b64decode(github_app_private_key)
 
-github_app_private_key = pem_path.read_bytes()
+private_key = serialization.load_der_private_key(
+    key_bytes,
+    password=None,
+    backend=default_backend()
+)
 
-# Taken from https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
+# Code taken from https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
 current_time = int(time.time())
 jwt_payload = {
     "iat": current_time,
@@ -26,4 +34,4 @@ jwt_payload = {
     "iss": github_app_client_id
 }
 
-encoded_jwt = jwt.encode(payload=jwt_payload, key=github_app_private_key, algorithm="RS256")
+encoded_jwt = jwt.encode(payload=jwt_payload, key=private_key, algorithm="RS256")

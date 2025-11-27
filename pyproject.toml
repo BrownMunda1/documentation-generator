@@ -5,8 +5,7 @@ dependencies = [
     "python-dotenv",
     "requests",
     "pydantic",
-    "PyGitHub",
-    "pygit2",
+    "cryptography",
     "langchain",
     "langchain-google-genai",
 ]
