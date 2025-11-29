@@ -29,7 +29,7 @@ def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: 
 
         if not clone_path.exists():
             Path.mkdir(clone_path)
-        
+
         github_url = f"{api_url}/repos/{org}/{repo}/contents/{root_path_name}?ref={branch}"
         print("here2")
         response = requests.get(
@@ -40,7 +40,7 @@ def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: 
         if response.status_code != 200:
             print("ERROR OCCURED:", response.text)
             return
-        
+
         repo_contents = response.json()
 
         if isinstance(repo_contents, list):

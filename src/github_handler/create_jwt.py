@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # We need to have Private Key of the GitHub App and the client ID of the GitHub App
-
 # We then create a jwt token out of that using this code:
 
 github_app_client_id = os.getenv("GITHUB_APP_CLIENT_ID")
