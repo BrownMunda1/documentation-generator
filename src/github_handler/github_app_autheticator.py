@@ -27,7 +27,7 @@ response = requests.get(
     verify=False
 )
 
-print("GET INSTALLATION ID:", response.json())
+# print("GET INSTALLATION ID:", response.json())
 
 github_app_installation_id = response.json().get("app_id", None)
 access_token_url = response.json().get("access_tokens_url", None)
@@ -42,6 +42,6 @@ access_token_response = requests.post(
     verify=False
 )
 
-print("GET ACCESS TOKEN:", access_token_response.json())
+# print("GET ACCESS TOKEN:", access_token_response.json())
 
 github_access_token = access_token_response.json().get("token", None)

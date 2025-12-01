@@ -8,13 +8,16 @@ from pydantic import HttpUrl
 from github_handler.github_app_autheticator import github_access_token
 from constants import GITHUB_API_URL
 
-def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: str):
+def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: str, should_clone: bool):
 
     # Logic for cloning the repository into staged folder
     parts = str(repo_url._url).strip("/").split("/")
     org, repo = parts[3], parts[4].strip(".git")
 
     cloned_repo_dir: Path = clone_dir / repo
+
+    if not should_clone:
+        return cloned_repo_dir
 
     if Path.exists(cloned_repo_dir):
         shutil.rmtree(cloned_repo_dir)
@@ -24,14 +27,14 @@ def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: 
     headers = {
         "Authorization": "Bearer " + token
     }
-    print("Cloning now...")
+    # print("Cloning now...")
     def download_repo_contents(root_path_name: str, clone_path: Path):
 
         if not clone_path.exists():
             Path.mkdir(clone_path)
 
         github_url = f"{api_url}/repos/{org}/{repo}/contents/{root_path_name}?ref={branch}"
-        print("here2")
+        # print("here2")
         response = requests.get(
             url=github_url,
             headers=headers
@@ -55,7 +58,7 @@ def clone(repo_url: HttpUrl, clone_dir: Path, token: str, api_url: str, branch: 
                     download_file_contents(url=item["url"], clone_path=item_local_path)
 
     def download_file_contents(url: str, clone_path: Path):
-        print("here")
+        # print("here")
         response = requests.get(
             url=url,
             headers=headers
@@ -91,9 +94,9 @@ def get_root_project_dir():
     
     return None
 
-def clone_repo(repo_url: HttpUrl, branch: str):
+def clone_repo(repo_url: HttpUrl, branch: str, should_clone: bool):
     root_dir = get_root_project_dir()
-    print("got root directory at:",str(root_dir))
+    # print("got root directory at:",str(root_dir))
     clone_dir = root_dir / "staged"
 
     cloned_dir = clone(
@@ -101,7 +104,8 @@ def clone_repo(repo_url: HttpUrl, branch: str):
         clone_dir=clone_dir,
         token=github_access_token,
         api_url=GITHUB_API_URL,
-        branch=branch
+        branch=branch,
+        should_clone=should_clone
     )
 
     return cloned_dir

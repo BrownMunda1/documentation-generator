@@ -7,6 +7,7 @@ dependencies = [
     "pydantic",
     "cryptography",
     "langchain",
+    "langchain-community",
     "langchain-google-genai",
 ]
 
