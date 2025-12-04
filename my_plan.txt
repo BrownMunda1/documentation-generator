@@ -1,0 +1,7 @@
+MVP 1
+1. Look into each file, create a summary of each
+2. Looking at the summary, generate documentation
+
+MVP 2
+1. Add ast parser thing
+2. Add knowledge graph creation and its usage with LLM
