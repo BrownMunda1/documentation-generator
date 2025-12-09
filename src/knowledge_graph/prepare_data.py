@@ -24,14 +24,14 @@ def create_code_data(project_dir: Path):
             #     from_module = node.module
             #     from_imports = [from_module + "." + imp.name for imp in node.names]
             #     per_file_data[normalized_file_path]["imports"](from_imports)
-            # elif isinstance(node, ast.ClassDef):
-            #     # print(node.bases)
-            #     class_data = handle_classes(node=node)
-            #     per_file_data[normalized_file_path]["classes"].extend(class_data)
-            # elif isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
-            #     function_data = handle_functions(node=node)
-            #     per_file_data[normalized_file_path]["functions"].extend(function_data)
-            #     # per_file_data[normalized_file_path]["functions"].extend(node.name)
+            elif isinstance(node, ast.ClassDef):
+                # print(node.bases)
+                class_data = handle_classes(node=node)
+                per_file_data[normalized_file_path]["classes"].append(class_data)
+            elif isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+                function_data = handle_functions(node=node)
+                per_file_data[normalized_file_path]["functions"].append(function_data)
+                # per_file_data[normalized_file_path]["functions"].extend(node.name)
 
     return per_file_data
 
@@ -63,24 +63,67 @@ def handle_classes(node: ast.ClassDef) -> dict:
     return {
         "name": "class name",
         "inherited": [list of inherited class names],
-        "": [],
+        "decorators": [list of decorators over the class names],
         "functions": ["list of function names],
         "description": Use get_docstring here
     }
     """
-    pass
+    class_name = node.name
+    description = ast.get_docstring(node=node)
+    inherted_classes = [ast.unparse(base) for base in node.bases]
+    decorators = [ast.unparse(d) for d in node.decorator_list]
+
+    functions_implemeted = []
+    constructor_args = []
+    for b in node.body:
+        if isinstance(b, ast.FunctionDef):
+            func_name = b.name
+            if func_name == "__init__":
+                arg_str = ast.unparse(b.args)
+                # arg_list = [arg.strip() for arg in arg_str.split(",")[1:]]
+                args = [{arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()} if len(arg.strip().split(":")) > 1 else {arg.strip(): "Unknown"} for arg in arg_str.split(",")[1:]]
+                constructor_args.extend(args)
+            if not func_name.startswith("_"):
+                functions_implemeted.append(func_name)
+
+    return {
+        "name": class_name,
+        "description": description,
+        "inherited": inherted_classes,
+        "constructor_args": constructor_args,
+        "public_functions": functions_implemeted,
+        "decorators": decorators
+    }
 
 def handle_functions(node: ast.FunctionDef) -> list:
     """
     return {
         "name": "function name",
-        "sub functions": [list of all sub functions],
+        "decorators": [list of decorators],
         "arguments": [list of all arguments],
         "returns": "What is the return type of the function",
         "description": Use get_docstring here
     }
     """
-    pass
+    func_name = node.name
+    description = ast.get_docstring(node=node)
+
+    try:
+        return_type = ast.unparse(node.returns)
+    except Exception as e:
+        return_type = "Unknown"
+
+    decorators = [ast.unparse(d) for d in node.decorator_list]
+    arg_str = ast.unparse(node.args)
+    arguments = [{arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()} if len(arg.strip().split(":")) > 1 else {arg.strip(): "Unknown"} for arg in arg_str.split(",")]
+
+    return {
+        "name": func_name,
+        "description": description,
+        "return_type": return_type,
+        "arguments": arguments,
+        "decorators": decorators,
+    }
 
 def handle_call_graph():
 
