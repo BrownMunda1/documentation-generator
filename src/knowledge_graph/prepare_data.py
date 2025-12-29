@@ -1,8 +1,11 @@
 import ast
+import json
 from collections import defaultdict
 from importlib.machinery import PathFinder
 from pathlib import Path
 from typing import DefaultDict
+
+from loguru import logger
 
 
 def create_code_data(project_dir: Path):
@@ -17,18 +20,11 @@ def create_code_data(project_dir: Path):
         )
         ast_tree = ast.parse(source=file_content)
         for node in ast.walk(ast_tree):
-            # Capture only Imports for data creation
             if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
                 import_data = handle_imports(project_dir=project_dir, node=node)
-                print(import_data)
-                # direct_imports = [imp.name for imp in node.names]
+                # print(normalized_file_path, ast.unparse(node), import_data)
                 per_file_data[normalized_file_path]["imports"].extend(import_data)
-            # elif isinstance(node, ast.ImportFrom):
-            #     from_module = node.module
-            #     from_imports = [from_module + "." + imp.name for imp in node.names]
-            #     per_file_data[normalized_file_path]["imports"](from_imports)
             elif isinstance(node, ast.ClassDef):
-                # print(node.bases)
                 class_data = handle_classes(node=node)
                 per_file_data[normalized_file_path]["classes"].append(class_data)
             elif isinstance(node, ast.FunctionDef) or isinstance(
@@ -36,7 +32,9 @@ def create_code_data(project_dir: Path):
             ):
                 function_data = handle_functions(node=node)
                 per_file_data[normalized_file_path]["functions"].append(function_data)
-                # per_file_data[normalized_file_path]["functions"].extend(node.name)
+
+    save_results_path = project_dir / "code_structure.json"
+    save_results_path.write_text(json.dumps(per_file_data, indent=4))
 
     return per_file_data
 
@@ -92,7 +90,6 @@ def handle_classes(node: ast.ClassDef) -> dict:
             func_name = b.name
             if func_name == "__init__":
                 arg_str = ast.unparse(b.args)
-                # arg_list = [arg.strip() for arg in arg_str.split(",")[1:]]
                 args = [
                     {
                         arg.strip()
@@ -166,7 +163,7 @@ def is_project_import(name: str, project_dir: Path) -> bool:
 
     search_paths = [str(project_dir)]
 
-    spec = PathFinder.find_spec(name, search_paths)
+    spec = PathFinder.find_spec(fullname=name, path=search_paths)
 
     if not spec or not spec.origin:
         return False

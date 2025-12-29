@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import requests
+from loguru import logger
 from pydantic import HttpUrl
 
 from constants import GITHUB_API_URL
@@ -46,7 +47,7 @@ def clone(
         response = requests.get(url=github_url, headers=headers)
 
         if response.status_code != 200:
-            print("ERROR OCCURED:", response.text)
+            logger.error("ERROR OCCURED:", response.text)
             return
 
         repo_contents = response.json()
@@ -73,7 +74,7 @@ def clone(
         response = requests.get(url=url, headers=headers)
 
         if response.status_code != 200:
-            print("ERROR OCCURED WHILE DOWNLOADING FILE:", response.text)
+            logger.error("ERROR OCCURED WHILE DOWNLOADING FILE:", response.text)
             return
 
         json_response = response.json()
