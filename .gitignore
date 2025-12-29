@@ -20,3 +20,4 @@ __pycache__
 # Custom Files
 my_plan.txt
 plan_from_aidocgen.txt
+temp*
