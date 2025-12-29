@@ -1,17 +1,20 @@
 import ast
-from pathlib import Path
 from collections import defaultdict
-from typing import DefaultDict
 from importlib.machinery import PathFinder
+from pathlib import Path
+from typing import DefaultDict
+
 
 def create_code_data(project_dir: Path):
-    per_file_data: DefaultDict[str, dict[str, list[str | dict[str, str | list[str]]]]] = defaultdict(
-        lambda: {"imports": [], "classes": [], "functions": []}
-    )
+    per_file_data: DefaultDict[
+        str, dict[str, list[str | dict[str, str | list[str]]]]
+    ] = defaultdict(lambda: {"imports": [], "classes": [], "functions": []})
 
     for file_path in project_dir.rglob(pattern="*.py"):
         file_content = file_path.read_text(encoding="utf-8")
-        normalized_file_path = normalize_file_path(file_path=file_path, project_dir=project_dir)
+        normalized_file_path = normalize_file_path(
+            file_path=file_path, project_dir=project_dir
+        )
         ast_tree = ast.parse(source=file_content)
         for node in ast.walk(ast_tree):
             # Capture only Imports for data creation
@@ -28,15 +31,23 @@ def create_code_data(project_dir: Path):
                 # print(node.bases)
                 class_data = handle_classes(node=node)
                 per_file_data[normalized_file_path]["classes"].append(class_data)
-            elif isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+            elif isinstance(node, ast.FunctionDef) or isinstance(
+                node, ast.AsyncFunctionDef
+            ):
                 function_data = handle_functions(node=node)
                 per_file_data[normalized_file_path]["functions"].append(function_data)
                 # per_file_data[normalized_file_path]["functions"].extend(node.name)
 
     return per_file_data
 
+
 def normalize_file_path(file_path: Path, project_dir: Path) -> str:
-    return str(Path(str(file_path).split(str(project_dir))[1][1:]).as_posix()).replace("/", ".").replace(".py", "")
+    return (
+        str(Path(str(file_path).split(str(project_dir))[1][1:]).as_posix())
+        .replace("/", ".")
+        .replace(".py", "")
+    )
+
 
 def handle_imports(project_dir: Path, node: ast.Import | ast.ImportFrom) -> list:
     """
@@ -54,9 +65,10 @@ def handle_imports(project_dir: Path, node: ast.Import | ast.ImportFrom) -> list
         if is_project_import(name=from_import, project_dir=project_dir):
             resolved_imports = [node.module + "." + imp.name for imp in node.names]
             for imp in resolved_imports:
-                    import_list.append(imp)
+                import_list.append(imp)
 
     return import_list
+
 
 def handle_classes(node: ast.ClassDef) -> dict:
     """
@@ -81,7 +93,18 @@ def handle_classes(node: ast.ClassDef) -> dict:
             if func_name == "__init__":
                 arg_str = ast.unparse(b.args)
                 # arg_list = [arg.strip() for arg in arg_str.split(",")[1:]]
-                args = [{arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()} if len(arg.strip().split(":")) > 1 else {arg.strip(): "Unknown"} for arg in arg_str.split(",")[1:]]
+                args = [
+                    {
+                        arg.strip()
+                        .split(":")[0]
+                        .strip(): arg.strip()
+                        .split(":")[1]
+                        .strip()
+                    }
+                    if len(arg.strip().split(":")) > 1
+                    else {arg.strip(): "Unknown"}
+                    for arg in arg_str.split(",")[1:]
+                ]
                 constructor_args.extend(args)
             if not func_name.startswith("_"):
                 functions_implemeted.append(func_name)
@@ -92,8 +115,9 @@ def handle_classes(node: ast.ClassDef) -> dict:
         "inherited": inherted_classes,
         "constructor_args": constructor_args,
         "public_functions": functions_implemeted,
-        "decorators": decorators
+        "decorators": decorators,
     }
+
 
 def handle_functions(node: ast.FunctionDef) -> list:
     """
@@ -115,7 +139,12 @@ def handle_functions(node: ast.FunctionDef) -> list:
 
     decorators = [ast.unparse(d) for d in node.decorator_list]
     arg_str = ast.unparse(node.args)
-    arguments = [{arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()} if len(arg.strip().split(":")) > 1 else {arg.strip(): "Unknown"} for arg in arg_str.split(",")]
+    arguments = [
+        {arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()}
+        if len(arg.strip().split(":")) > 1
+        else {arg.strip(): "Unknown"}
+        for arg in arg_str.split(",")
+    ]
 
     return {
         "name": func_name,
@@ -125,14 +154,16 @@ def handle_functions(node: ast.FunctionDef) -> list:
         "decorators": decorators,
     }
 
+
 def handle_call_graph():
 
     ### Explore pyan library for call graph
 
     pass
 
+
 def is_project_import(name: str, project_dir: Path) -> bool:
-    
+
     search_paths = [str(project_dir)]
 
     spec = PathFinder.find_spec(name, search_paths)

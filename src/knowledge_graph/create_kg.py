@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from llm_utility.caller import call_llm
 from knowledge_graph.prepare_data import create_file_to_import_mapping
+from llm_utility.caller import call_llm
+
 
 def create_kg(project_dir: Path):
 

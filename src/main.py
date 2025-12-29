@@ -1,17 +1,15 @@
-import ast
-from pathlib import Path
-from collections import defaultdict
-from typing import Union
-
 from pydantic import HttpUrl
 
 from github_handler import repo_cloner
-from llm_utility.file_chunker import create_docs
-from summarizer import chunk_summarizer, file_summarizer, directory_summarizer, project_summarizer
+
 # from knowledge_graph.create_kg import create_kg
 from knowledge_graph.prepare_data import create_code_data
 
-project_dir = repo_cloner.clone_repo(repo_url=HttpUrl(url="https://github.com/BrownMunda1/cicd-automation.git"), branch="main", should_clone=False)
+project_dir = repo_cloner.clone_repo(
+    repo_url=HttpUrl(url="https://github.com/BrownMunda1/cicd-automation.git"),
+    branch="main",
+    should_clone=False,
+)
 
 print(create_code_data(project_dir=project_dir))
 

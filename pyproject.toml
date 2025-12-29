@@ -13,9 +13,10 @@ dependencies = [
 
 [project.optional-dependencies]
 local = [
-    "build"
+    "build",
+    "pre-commit",
 ]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"

@@ -2,7 +2,10 @@ from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-def call_llm(prompt: str, structured_output_class: Any = None, model: str = "gemini-2.5-flash"):
+
+def call_llm(
+    prompt: str, structured_output_class: Any = None, model: str = "gemini-2.5-flash"
+):
 
     llm = ChatGoogleGenerativeAI(model=model)
 
