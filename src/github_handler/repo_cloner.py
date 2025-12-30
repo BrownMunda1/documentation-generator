@@ -7,7 +7,7 @@ from loguru import logger
 from pydantic import HttpUrl
 
 from constants import GITHUB_API_URL
-from github_handler.github_app_autheticator import github_access_token
+from github_handler.github_app_authenticator import github_access_token
 
 
 def clone(
