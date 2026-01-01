@@ -11,19 +11,21 @@ from loguru import logger
 def create_code_data(project_dir: Path):
     per_file_data: DefaultDict[
         str, dict[str, list[str | dict[str, str | list[str]]]]
-    ] = defaultdict(lambda: {"imports": [], "classes": [], "functions": []})
-
+    ] = DefaultDict(lambda: {"imports": [], "classes": [], "functions": []})
     for file_path in project_dir.rglob(pattern="*.py"):
         file_content = file_path.read_text(encoding="utf-8")
-        normalized_file_path = normalize_file_path(
-            file_path=file_path, project_dir=project_dir
-        )
+        normalized_file_path = normalize_path(path=file_path, project_dir=project_dir)
         ast_tree = ast.parse(source=file_content)
         for node in ast.walk(ast_tree):
+            for child in ast.iter_child_nodes(node=node):
+                child.parent = node
             if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
-                import_data = handle_imports(project_dir=project_dir, node=node)
-                # print(normalized_file_path, ast.unparse(node), import_data)
-                per_file_data[normalized_file_path]["imports"].extend(import_data)
+                resolved_imports_list = handle_imports(
+                    project_dir=project_dir, file_path=file_path, node=node
+                )
+                per_file_data[normalized_file_path]["imports"].extend(
+                    resolved_imports_list
+                )
             elif isinstance(node, ast.ClassDef):
                 class_data = handle_classes(node=node)
                 per_file_data[normalized_file_path]["classes"].append(class_data)
@@ -35,19 +37,35 @@ def create_code_data(project_dir: Path):
 
     save_results_path = project_dir / "code_structure.json"
     save_results_path.write_text(json.dumps(per_file_data, indent=4))
-
     return per_file_data
 
 
-def normalize_file_path(file_path: Path, project_dir: Path) -> str:
+def is_path_dir(path: str, project_dir: Path):
+    rel_path = path.replace(".", "/")
+    dir_path = project_dir / Path(rel_path)
+
+    if dir_path.exists():
+        return "DIRECTORY"
+
+    rel_path = rel_path + ".py"
+    file_path = project_dir / Path(rel_path)
+    if file_path.exists():
+        return "FILE"
+
+    return None
+
+
+def normalize_path(path: Path, project_dir: Path) -> str:
     return (
-        str(Path(str(file_path).split(str(project_dir))[1][1:]).as_posix())
+        str(Path(str(path).split(str(project_dir))[1][1:]).as_posix())
         .replace("/", ".")
         .replace(".py", "")
     )
 
 
-def handle_imports(project_dir: Path, node: ast.Import | ast.ImportFrom) -> list:
+def handle_imports(
+    project_dir: Path, file_path: Path, node: ast.Import | ast.ImportFrom
+) -> list:
     """
     Filter all the third party imports, keep only in-project imports
     return [list of all imports]
@@ -56,16 +74,117 @@ def handle_imports(project_dir: Path, node: ast.Import | ast.ImportFrom) -> list
     if isinstance(node, ast.Import):
         direct_imports = [imp.name for imp in node.names]
         for imp in direct_imports:
-            if is_project_import(name=imp, project_dir=project_dir):
-                import_list.append(imp)
-    else:
-        from_import = node.module
-        if is_project_import(name=from_import, project_dir=project_dir):
-            resolved_imports = [node.module + "." + imp.name for imp in node.names]
-            for imp in resolved_imports:
-                import_list.append(imp)
+            is_valid, import_path = is_project_import(name=imp, project_dir=project_dir)
+            if is_valid:
+                import_list.append(import_path)
+        return import_list
+    elif isinstance(node, ast.ImportFrom):
 
-    return import_list
+        current_file_path = file_path
+
+        import_module = node.module if node.module is not None else ""
+        if node.level == 0:
+            is_valid, import_path = is_project_import(
+                name=import_module, project_dir=project_dir
+            )
+            if is_valid:
+
+                # Handle like normal Import
+                if ast.unparse(node.names) == "*":
+                    resolved_imports = [import_path]
+
+                else:
+                    is_dir = is_path_dir(path=import_path, project_dir=project_dir)
+                    if is_dir:
+                        if is_dir.lower() == "directory":
+                            resolved_imports = [
+                                import_path + "." + imp.name for imp in node.names
+                            ]
+                        else:
+                            resolved_imports = [import_path]
+            else:
+                resolved_imports = []
+        else:
+            level = node.level
+            parent_import = current_file_path
+            while level > 0:
+                parent_import = parent_import.parent
+                level -= 1
+
+            normal_file_path = normalize_path(
+                path=parent_import, project_dir=project_dir
+            )
+
+            import_module = node.module if node.module is not None else ""
+
+            if normal_file_path == ".":
+                abs_import = import_module
+            elif import_module == "":
+                abs_import = normal_file_path
+            else:
+                abs_import = normal_file_path + "." + import_module
+
+            # Handle like normal Import
+            if ast.unparse(node.names) == "*":
+                resolved_imports = [abs_import]
+
+            else:
+                is_dir = is_path_dir(path=abs_import, project_dir=project_dir)
+                if is_dir:
+                    if is_dir.lower() == "directory":
+                        resolved_imports = [
+                            abs_import + "." + imp.name for imp in node.names
+                        ]
+                    else:
+                        resolved_imports = [abs_import]
+        return resolved_imports
+
+
+def is_project_import(name: str, project_dir: Path) -> bool:
+
+    module_parts = name.split(".")
+    search_module = module_parts[0]
+
+    # Handle the case where the import is a direct file
+    file_module = search_module + ".py"
+
+    is_valid = False
+    abs_path = None
+    matching_paths = project_dir.rglob(pattern=search_module, case_sensitive=True)
+    if not matching_paths or len(list(matching_paths)) == 0:
+        search_module = file_module
+
+    for item in project_dir.rglob(pattern=search_module, case_sensitive=True):
+        if item.is_dir():
+            rem_parts = module_parts[1:]
+            current_path = item
+            for part in rem_parts:
+                current_path = current_path / part
+                if not current_path.exists():
+                    is_valid = False
+                    break
+                elif not current_path.is_dir():
+                    current_path = current_path.with_suffix(".py")
+                    if current_path.is_file():
+                        is_valid = True
+                        abs_path = normalize_path(
+                            path=current_path, project_dir=project_dir
+                        )
+                    break
+
+            if not is_valid and current_path.exists():
+                is_valid = True
+                abs_path = normalize_path(path=current_path, project_dir=project_dir)
+
+            if is_valid:
+                break
+
+        elif item.is_file():
+            is_valid = True
+            abs_path = normalize_path(path=item, project_dir=project_dir)
+            break
+
+    return is_valid, abs_path
 
 
 def handle_classes(node: ast.ClassDef) -> dict:
@@ -116,7 +235,7 @@ def handle_classes(node: ast.ClassDef) -> dict:
     }
 
 
-def handle_functions(node: ast.FunctionDef) -> list:
+def handle_functions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list:
     """
     return {
         "name": "function name",
@@ -157,19 +276,3 @@ def handle_call_graph():
     ### Explore pyan library for call graph
 
     pass
-
-
-def is_project_import(name: str, project_dir: Path) -> bool:
-
-    search_paths = [str(project_dir)]
-
-    spec = PathFinder.find_spec(fullname=name, path=search_paths)
-
-    if not spec or not spec.origin:
-        return False
-
-    path = spec.origin
-
-    if path.startswith(str(project_dir)):
-        return True
-    return False
