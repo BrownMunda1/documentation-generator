@@ -1,7 +1,5 @@
 import ast
 import json
-from collections import defaultdict
-from importlib.machinery import PathFinder
 from pathlib import Path
 from typing import DefaultDict
 
@@ -16,25 +14,39 @@ def create_code_data(project_dir: Path):
         file_content = file_path.read_text(encoding="utf-8")
         normalized_file_path = normalize_path(path=file_path, project_dir=project_dir)
         ast_tree = ast.parse(source=file_content)
+        import_names_list = []
         for node in ast.walk(ast_tree):
             for child in ast.iter_child_nodes(node=node):
                 child.parent = node
             if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
-                resolved_imports_list = handle_imports(
+                resolved_imports_list, import_names_list = handle_imports(
                     project_dir=project_dir, file_path=file_path, node=node
                 )
                 per_file_data[normalized_file_path]["imports"].extend(
                     resolved_imports_list
                 )
             elif isinstance(node, ast.ClassDef):
-                class_data = handle_classes(node=node)
+                class_data = handle_classes(
+                    node=node,
+                    project_dir=project_dir,
+                    file_path=file_path,
+                    import_names_list=import_names_list,
+                )
                 per_file_data[normalized_file_path]["classes"].append(class_data)
-            elif isinstance(node, ast.FunctionDef) or isinstance(
-                node, ast.AsyncFunctionDef
+            elif (
+                isinstance(node, ast.FunctionDef)
+                or isinstance(node, ast.AsyncFunctionDef)
+                and not isinstance(node.parent, ast.ClassDef)
             ):
-                function_data = handle_functions(node=node)
+                function_data = handle_functions(
+                    node=node,
+                    project_dir=project_dir,
+                    file_path=file_path,
+                    import_names_list=import_names_list,
+                )
                 per_file_data[normalized_file_path]["functions"].append(function_data)
 
+    # print(per_file_data)
     save_results_path = project_dir / "code_structure.json"
     save_results_path.write_text(json.dumps(per_file_data, indent=4))
     return per_file_data
@@ -70,15 +82,19 @@ def handle_imports(
     Filter all the third party imports, keep only in-project imports
     return [list of all imports]
     """
-    import_list = []
     if isinstance(node, ast.Import):
+        import_path_list = []
+        import_names_list = []
         direct_imports = [imp.name for imp in node.names]
         for imp in direct_imports:
             is_valid, import_path = is_project_import(name=imp, project_dir=project_dir)
             if is_valid:
-                import_list.append(import_path)
-        return import_list
+                import_path_list.append(import_path)
+                import_names_list.append(imp)
+        return import_path_list, import_names_list
     elif isinstance(node, ast.ImportFrom):
+        resolved_imports_path_list = []
+        import_names_list = []
 
         current_file_path = file_path
 
@@ -89,22 +105,27 @@ def handle_imports(
             )
             if is_valid:
 
-                # Handle like normal Import
+                # Wildcard imports - Handle like normal Import. Import names remain empty.
                 if ast.unparse(node.names) == "*":
-                    resolved_imports = [import_path]
+                    resolved_imports_path_list = [import_path]
 
                 else:
+                    import_names_list.extend([imp.name for imp in node.names])
                     is_dir = is_path_dir(path=import_path, project_dir=project_dir)
                     if is_dir:
                         if is_dir.lower() == "directory":
-                            resolved_imports = [
+                            resolved_imports_path_list = [
                                 import_path + "." + imp.name for imp in node.names
                             ]
                         else:
-                            resolved_imports = [import_path]
+                            # If import is a file, no need to capture the variable in import path
+                            resolved_imports_path_list = [import_path]
             else:
-                resolved_imports = []
+                resolved_imports_path_list = []
         else:
+            # Relative import will always be in-project import
+            import_names_list.extend([imp.name for imp in node.names])
+
             level = node.level
             parent_import = current_file_path
             while level > 0:
@@ -126,18 +147,18 @@ def handle_imports(
 
             # Handle like normal Import
             if ast.unparse(node.names) == "*":
-                resolved_imports = [abs_import]
+                resolved_imports_path_list = [abs_import]
 
             else:
                 is_dir = is_path_dir(path=abs_import, project_dir=project_dir)
                 if is_dir:
                     if is_dir.lower() == "directory":
-                        resolved_imports = [
+                        resolved_imports_path_list = [
                             abs_import + "." + imp.name for imp in node.names
                         ]
                     else:
-                        resolved_imports = [abs_import]
-        return resolved_imports
+                        resolved_imports_path_list = [abs_import]
+        return resolved_imports_path_list, import_names_list
 
 
 def is_project_import(name: str, project_dir: Path) -> bool:
@@ -187,7 +208,9 @@ def is_project_import(name: str, project_dir: Path) -> bool:
     return is_valid, abs_path
 
 
-def handle_classes(node: ast.ClassDef) -> dict:
+def handle_classes(
+    project_dir: Path, file_path: Path, node: ast.ClassDef, import_names_list: list
+) -> dict:
     """
     return {
         "name": "class name",
@@ -197,15 +220,29 @@ def handle_classes(node: ast.ClassDef) -> dict:
         "description": Use get_docstring here
     }
     """
-    class_name = node.name
+    normalized_file_path = normalize_path(path=file_path, project_dir=project_dir)
+    class_id = f"{normalized_file_path}.{node.name}"
+    # class_name = node.name
     description = ast.get_docstring(node=node)
-    inherted_classes = [ast.unparse(base) for base in node.bases]
-    decorators = [ast.unparse(d) for d in node.decorator_list]
+    inherted_classes = []
+    decorators = []
+    for base in node.bases:
+        inherit_class_name = ast.unparse(base)
+        if inherit_class_name.split(".")[0] in import_names_list:
+            inherted_classes.append(inherit_class_name)
+
+    for d in node.decorator_list:
+        decorator_name = ast.unparse(d)
+        if decorator_name.split(".")[0] in import_names_list:
+            decorators.append(decorator_name)
+    # decorators = [ast.unparse(d) for d in node.decorator_list]
+    # for item in node.body:
+    #     if isinstance(item, ast.FunctionDef) or isinstance(item, ast.AsyncFunctionDef):
 
     functions_implemeted = []
     constructor_args = []
     for b in node.body:
-        if isinstance(b, ast.FunctionDef):
+        if isinstance(b, ast.FunctionDef) or isinstance(b, ast.AsyncFunctionDef):
             func_name = b.name
             if func_name == "__init__":
                 arg_str = ast.unparse(b.args)
@@ -223,19 +260,24 @@ def handle_classes(node: ast.ClassDef) -> dict:
                 ]
                 constructor_args.extend(args)
             if not func_name.startswith("_"):
-                functions_implemeted.append(func_name)
+                functions_implemeted.append(f"{class_id}.{func_name}")
 
     return {
-        "name": class_name,
+        "class_id": class_id,
         "description": description,
         "inherited": inherted_classes,
         "constructor_args": constructor_args,
-        "public_functions": functions_implemeted,
+        "defined_functions": functions_implemeted,
         "decorators": decorators,
     }
 
 
-def handle_functions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list:
+def handle_functions(
+    project_dir: Path,
+    file_path: Path,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    import_names_list: list,
+) -> list:
     """
     return {
         "name": "function name",
@@ -245,7 +287,9 @@ def handle_functions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list:
         "description": Use get_docstring here
     }
     """
-    func_name = node.name
+    normalized_file_path = normalize_path(path=file_path, project_dir=project_dir)
+    func_id = f"{normalized_file_path}.{node.name}"
+    # func_name = node.name
     description = ast.get_docstring(node=node)
 
     try:
@@ -253,7 +297,12 @@ def handle_functions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list:
     except Exception as e:
         return_type = "Unknown"
 
-    decorators = [ast.unparse(d) for d in node.decorator_list]
+    decorators = []
+    for d in node.decorator_list:
+        decorator_name = ast.unparse(d)
+        if decorator_name.split(".")[0] in import_names_list:
+            decorators.append(decorator_name)
+
     arg_str = ast.unparse(node.args)
     arguments = [
         {arg.strip().split(":")[0].strip(): arg.strip().split(":")[1].strip()}
@@ -262,11 +311,20 @@ def handle_functions(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list:
         for arg in arg_str.split(",")
     ]
 
+    function_calls = []
+    for c in ast.walk(node):
+        if isinstance(c, ast.Call):
+            function_call = ast.unparse(c.func)
+            if function_call.split(".")[0] in import_names_list:
+                function_calls.append(ast.unparse(c.func))
+
     return {
-        "name": func_name,
+        # "name": func_name,
+        "function_id": func_id,
         "description": description,
         "return_type": return_type,
         "arguments": arguments,
+        "intra_project_function_calls": function_calls,
         "decorators": decorators,
     }
 
