@@ -11,8 +11,9 @@ dist
 # Certificates
 *.pem
 
-# Temporary folders
+# Temporary files and folders
 staged
+temp*
 
 # Cache Files
 __pycache__
